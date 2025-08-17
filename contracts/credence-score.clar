@@ -194,3 +194,89 @@
     (ok true)
   )
 )
+
+;; Bootstrap the contract with standard Bitcoin ecosystem reputation actions
+(define-public (initialize-reputation-actions)
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) (err ERR-NOT-ADMIN))
+    (map-set reputation-actions { action-type: "governance-vote" } {
+      multiplier: u5,
+      description: "Participation in governance voting",
+      active: true,
+    })
+    (map-set reputation-actions { action-type: "contract-fulfillment" } {
+      multiplier: u10,
+      description: "Successful completion of a smart contract agreement",
+      active: true,
+    })
+    (map-set reputation-actions { action-type: "community-contribution" } {
+      multiplier: u7,
+      description: "Contribution to community projects or initiatives",
+      active: true,
+    })
+    (map-set reputation-actions { action-type: "validation" } {
+      multiplier: u3,
+      description: "Validation of network transactions or data",
+      active: true,
+    })
+    (map-set reputation-actions { action-type: "content-creation" } {
+      multiplier: u6,
+      description: "Creation of valuable content on the platform",
+      active: true,
+    })
+    (ok true)
+  )
+)
+
+;; HELPER FUNCTIONS
+
+;; Validate that a principal has a registered identity and is the transaction sender
+(define-private (is-valid-owner (owner principal))
+  (and
+    (is-some (map-get? identities { owner: owner }))
+    (is-eq owner tx-sender)
+  )
+)
+
+;; Create immutable audit trail entry for reputation score changes
+(define-private (log-reputation-change
+    (owner principal)
+    (action-type (string-ascii 50))
+    (previous-score uint)
+    (new-score uint)
+  )
+  (map-set reputation-history {
+    owner: owner,
+    tx-id: stacks-block-height,
+  } {
+    action-type: action-type,
+    previous-score: previous-score,
+    new-score: new-score,
+    timestamp: burn-block-height,
+    block-height: stacks-block-height,
+  })
+)
+
+;; Retrieve the scoring multiplier for a specific action type
+(define-private (get-action-multiplier (action-type (string-ascii 50)))
+  (default-to u0
+    (get multiplier (map-get? reputation-actions { action-type: action-type }))
+  )
+)
+
+;; Check whether a reputation action type is currently enabled
+(define-private (is-action-active (action-type (string-ascii 50)))
+  (default-to false
+    (get active (map-get? reputation-actions { action-type: action-type }))
+  )
+)
+
+;; Safely retrieve identity data for a given principal
+(define-private (get-identity-field (owner principal))
+  (map-get? identities { owner: owner })
+)
+
+;; Determine if reputation decay should be applied based on time elapsed
+(define-private (should-decay (last-decay uint))
+  (>= (- stacks-block-height last-decay) (var-get decay-period))
+)
